@@ -86,14 +86,16 @@ class DemandQueue(QWidget):
         insert_text1 = QLabel("向第", insert_anywhere)
         self.insert_place = QLineEdit(insert_anywhere)
         self.insert_place.setFixedWidth(50)
-        insert_text2 = QLabel("行插入", insert_anywhere)
+        insert_text2 = QLabel("行", insert_anywhere)
         insert_button = QPushButton(insert_anywhere)
         insert_button.setText("插入点播")
         insert_button.clicked.connect(self.insert_queue)
+        ia_layout.addStretch()
         ia_layout.addWidget(insert_text1)
         ia_layout.addWidget(self.insert_place)
         ia_layout.addWidget(insert_text2)
         ia_layout.addWidget(insert_button)
+        ia_layout.addStretch()
         insert_anywhere.setLayout(ia_layout)
         
         self.layout = QVBoxLayout()
@@ -129,10 +131,14 @@ class DemandQueue(QWidget):
         self.insert_queue(0)
         
     def pop_queue(self):
+        if len(self.history) == 0:
+            # Empty history
+            # Can add pop-up here
+            return
         self.history.popleft()
         self.table.removeRow(0)
     
-    def insert_queue(self, row = None):
+    def insert_queue(self, row=None):
         name = self.name.toPlainText()
         desc = self.desc.toPlainText()
         date = self.date.toPlainText()
