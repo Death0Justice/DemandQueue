@@ -1,8 +1,8 @@
 from collections import deque
 import csv
 from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QIntValidator
-from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIntValidator, QCursor
+from PyQt5.QtCore import Qt, QPoint
         
 class DemandQueue(QWidget):
 
@@ -131,11 +131,26 @@ class DemandQueue(QWidget):
         table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
         table.setColumnWidth(2, 150)
+        table.cellDoubleClicked.connect(self.showDemand)
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
         for i in range(n):
             table.setItem(i, 0, QTableWidgetItem(queue[i][0]))
             table.setItem(i, 1, QTableWidgetItem(queue[i][1]))
             table.setItem(i, 2, QTableWidgetItem(queue[i][2]))
         return table
+    
+    def showDemand(self, row, col):
+        demand = self.history[row]
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f'{demand[0]} 的点播')
+        dialog.setMinimumSize(480, 270)
+        dialog_layout = QVBoxLayout()
+        info = QLabel(demand[1], dialog)
+        info.setWordWrap(True)
+        dialog_layout.addWidget(info, alignment=Qt.AlignCenter)
+        dialog_layout.addWidget(QLabel(f'于{demand[2]}', dialog), alignment=Qt.AlignCenter)
+        dialog.setLayout(dialog_layout)
+        dialog.exec()
 
     def append_queue(self):
         self.insert_queue(self.table.rowCount())
@@ -171,6 +186,8 @@ class DemandQueue(QWidget):
         self.table.setItem(row, 0, QTableWidgetItem(name))
         self.table.setItem(row, 1, QTableWidgetItem(desc))
         self.table.setItem(row, 2, QTableWidgetItem(date))
+        
+        self.onlyInt.setTop(self.table.rowCount())
     
     def quick_action(self):
         # Save the csv file before using buggy feature
@@ -186,25 +203,31 @@ class DemandQueue(QWidget):
 
         if ok:
             table = str(text).split(";")
-            # Prevent misinput of Full-width colon
-            table = table.split("；")
             if len(table) > 1:
                 for line in table:
                     if not line:
                         continue
                     row = [s for s in line.split("\n") if s]
                     # Appending
+                    name = row[0]
+                    date = row[-1]
+                    desc = "\n".join(row[1:-1])
                     self.history.append(row)
                     n = self.table.rowCount()
                     self.table.insertRow(n)
-                    self.table.setItem(n, 0, QTableWidgetItem(row[0]))
-                    self.table.setItem(n, 1, QTableWidgetItem(row[1]))
-                    self.table.setItem(n, 2, QTableWidgetItem(row[2]))
+                    self.table.setItem(n, 0, QTableWidgetItem(name))
+                    self.table.setItem(n, 1, QTableWidgetItem(desc))
+                    self.table.setItem(n, 2, QTableWidgetItem(date))
             else:
                 row = [s for s in str(text).split("\n") if s]
-                self.name.setText(row[0])
-                self.desc.setText(row[1])
-                self.date.setText(row[2])
+                name = row[0]
+                date = row[-1]
+                desc = "\n".join(row[1:-1])
+                self.name.setText(name)
+                self.desc.setText(desc)
+                self.date.setText(date)
+        
+        self.onlyInt.setTop(self.table.rowCount())
     
     def updateCSV(self):
         # print(self.history)
