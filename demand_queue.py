@@ -1,5 +1,5 @@
 from collections import deque
-import csv
+import csv, sys
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QIntValidator, QCursor
 from PyQt5.QtCore import Qt, QPoint
@@ -165,6 +165,9 @@ class DemandQueue(QWidget):
             return
         self.history.popleft()
         self.table.removeRow(0)
+        
+        self.onlyInt.setTop(self.table.rowCount())
+        self.updateCSV()
     
     def insert_queue(self, row=None):
         name = self.name.toPlainText()
@@ -188,6 +191,7 @@ class DemandQueue(QWidget):
         self.table.setItem(row, 2, QTableWidgetItem(date))
         
         self.onlyInt.setTop(self.table.rowCount())
+        self.updateCSV()
     
     def quick_action(self):
         # Save the csv file before using buggy feature
@@ -228,6 +232,7 @@ class DemandQueue(QWidget):
                 self.date.setText(date)
         
         self.onlyInt.setTop(self.table.rowCount())
+        self.updateCSV()
     
     def updateCSV(self):
         # print(self.history)
@@ -235,6 +240,13 @@ class DemandQueue(QWidget):
             writer = csv.writer(h, delimiter=",", lineterminator="\n")
             for line in self.history:
                 writer.writerow(line)
-
-    def __del__(self):
-        self.updateCSV()
+        
+if __name__ == "__main__":
+    qApp = QApplication(sys.argv)
+    window = QWidget()
+    dq = DemandQueue(window)
+    window.setWindowTitle("点播队列")
+    window.resize(960, 960)
+    window.show()
+    
+    sys.exit(qApp.exec_())
