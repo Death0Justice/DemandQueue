@@ -41,7 +41,7 @@ class DemandQueue(QWidget):
         
         # Constraint on self.insert_place
         self.onlyInt = QIntValidator(self)
-        self.onlyInt.setRange(0, self.table.rowCount())
+        self.onlyInt.setRange(1, self.table.rowCount())
         
         edit = QWidget(self)
         edit_layout = QHBoxLayout()
@@ -100,10 +100,11 @@ class DemandQueue(QWidget):
         insert_text1 = QLabel("向第", insert_anywhere)
         self.insert_place = QLineEdit(insert_anywhere)
         self.insert_place.setFixedWidth(50)
+        self.insert_place.setValidator(self.onlyInt)
         insert_text2 = QLabel("行", insert_anywhere)
         insert_button = QPushButton(insert_anywhere)
         insert_button.setText("插入点播")
-        insert_button.clicked.connect(self.insert_queue)
+        insert_button.clicked.connect(self.insert_anywhere)
         ia_layout.addStretch()
         ia_layout.addWidget(insert_text1)
         ia_layout.addWidget(self.insert_place)
@@ -152,6 +153,9 @@ class DemandQueue(QWidget):
         dialog_layout.addWidget(QLabel(f'于{demand[2]}', dialog), alignment=Qt.AlignCenter)
         dialog.setLayout(dialog_layout)
         dialog.exec()
+        
+    def insert_anywhere(self):
+        self.insert_queue()
 
     def append_queue(self):
         self.insert_queue(self.table.rowCount())
@@ -177,7 +181,7 @@ class DemandQueue(QWidget):
         new = [name, desc, date]
         if row == None:
             # Inserting
-            row = int(self.insert_place.toPlainText())
+            row = int(self.insert_place.text()) - 1
             self.history.insert(row, new)
         elif row == 0:
             # Pushing
