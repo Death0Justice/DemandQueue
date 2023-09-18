@@ -142,9 +142,10 @@ class DemandQueue(QWidget):
     def showDemand(self, row, col):
         demand = self.history[row]
         dialog = QDialog(self)
-        dialog.setWindowTitle(f'{demand[0]} 的点播')
+        dialog.setWindowTitle(f'点播详情')
         dialog.setMinimumSize(480, 270)
         dialog_layout = QVBoxLayout()
+        dialog_layout.addWidget(QLabel(f'{demand[0]}的点播'), alignment=Qt.AlignCenter)
         info = QLabel(demand[1], dialog)
         info.setWordWrap(True)
         dialog_layout.addWidget(info, alignment=Qt.AlignCenter)
