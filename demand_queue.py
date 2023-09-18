@@ -1,5 +1,6 @@
 from collections import deque
 import csv, sys
+from datetime import datetime
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QIntValidator, QCursor
 from PyQt5.QtCore import Qt, QPoint
@@ -8,6 +9,7 @@ class DemandQueue(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.date_format = '%Y-%m-%d %H:%M'
         if not self.initHistory():
             return
         self.initUI()
@@ -77,17 +79,13 @@ class DemandQueue(QWidget):
         
         insert = QWidget(self)
         insert_layout = QHBoxLayout()
-        quick = QPushButton(insert)
-        quick.setText("快速添加")
+        quick = QPushButton("快速添加", insert)
         quick.clicked.connect(self.quick_action)
-        append = QPushButton(insert)
-        append.setText("添加点播")
+        append = QPushButton("添加点播", insert)
         append.clicked.connect(self.append_queue)
-        push = QPushButton(insert)
-        push.setText("插播")
+        push = QPushButton("插播", insert)
         push.clicked.connect(self.push_queue)
-        pop = QPushButton(insert)
-        pop.setText("完成点播")
+        pop = QPushButton("完成点播", insert)
         pop.clicked.connect(self.pop_queue)
         insert_layout.addWidget(quick)
         insert_layout.addWidget(append)
@@ -102,14 +100,16 @@ class DemandQueue(QWidget):
         self.insert_place.setFixedWidth(50)
         self.insert_place.setValidator(self.onlyInt)
         insert_text2 = QLabel("行", insert_anywhere)
-        insert_button = QPushButton(insert_anywhere)
-        insert_button.setText("插入点播")
+        insert_button = QPushButton("插入点播", insert_anywhere)
         insert_button.clicked.connect(self.insert_anywhere)
+        sort_button = QPushButton("按时间排序")
+        sort_button.clicked.connect(self.sort)
         ia_layout.addStretch()
         ia_layout.addWidget(insert_text1)
         ia_layout.addWidget(self.insert_place)
         ia_layout.addWidget(insert_text2)
         ia_layout.addWidget(insert_button)
+        ia_layout.addWidget(sort_button)
         ia_layout.addStretch()
         insert_anywhere.setLayout(ia_layout)
         
@@ -131,7 +131,7 @@ class DemandQueue(QWidget):
         table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Interactive)
         table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
-        table.setColumnWidth(2, 150)
+        table.setColumnWidth(2, 170)
         table.cellDoubleClicked.connect(self.showDemand)
         table.setEditTriggers(QTableWidget.NoEditTriggers)
         for i in range(n):
@@ -185,15 +185,16 @@ class DemandQueue(QWidget):
             self.history.insert(row, new)
         elif row == 0:
             # Pushing
+            new = [new[0], "插播: " + new[1], new[2]]
             self.history.appendleft(new)
         elif row == self.table.rowCount():
             # Appending
             self.history.append(new)
         
         self.table.insertRow(row)
-        self.table.setItem(row, 0, QTableWidgetItem(name))
-        self.table.setItem(row, 1, QTableWidgetItem(desc))
-        self.table.setItem(row, 2, QTableWidgetItem(date))
+        self.table.setItem(row, 0, QTableWidgetItem(new[0]))
+        self.table.setItem(row, 1, QTableWidgetItem(new[1]))
+        self.table.setItem(row, 2, QTableWidgetItem(new[2]))
         
         self.onlyInt.setTop(self.table.rowCount())
         self.updateCSV()
@@ -238,6 +239,24 @@ class DemandQueue(QWidget):
         
         self.onlyInt.setTop(self.table.rowCount())
         self.updateCSV()
+    
+    def sort(self):
+        push_history = []
+        append_history = []
+        for h in self.history:
+            if str(h[1]).startswith("插播"):
+                push_history.append(h)
+            else:
+                append_history.append(h)
+        push_history.sort(key=lambda h: datetime.strptime(h[2], self.date_format), reverse=True)
+        append_history.sort(key=lambda h: datetime.strptime(h[2], self.date_format))
+        self.history = deque(push_history + append_history)
+        # print(self.history)
+        self.table.clearContents()
+        for i, h in enumerate(self.history):
+            self.table.setItem(i, 0, QTableWidgetItem(h[0]))
+            self.table.setItem(i, 1, QTableWidgetItem(h[1]))
+            self.table.setItem(i, 2, QTableWidgetItem(h[2]))
     
     def updateCSV(self):
         # print(self.history)
