@@ -1,31 +1,41 @@
 from collections import deque
-import json
+import csv, sys
 from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QIntValidator
-from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIntValidator, QCursor
+from PyQt5.QtCore import Qt, QPoint
         
 class DemandQueue(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        if not self.initHistory():
+            return
         self.initUI()
     
-    def initUI(self):
+    def initHistory(self) -> bool:
         self.history = deque()
         try:
-            with open('history.json', "r") as h:
-                self.history = deque(json.loads(h.read()))
+            with open('history.csv', "r", encoding="utf-8") as h:
+                reader = csv.reader(h, delimiter=',')
+                for line in reader:
+                    self.history.append(line)
         except FileNotFoundError:
-            with open('history.json', "x") as h:
-                h.write("[]")
+            with open('history.csv', "x", encoding="utf-8") as h:
+                pass
         except:
-            print('File corrupted, recreating? Y/N')
-            prompt = input()
-            if (prompt == 'y' or prompt == 'Y'):
-                with open('history.json', "w") as h:
-                    h.write("[]")
-            else:
-                return
+            # Can be handled using a dialog window
+            # print('File corrupted, recreating? Y/N')
+            while True:
+                prompt = input()
+                if (prompt == 'y' or prompt == 'Y'):
+                    with open('history.csv', "w", encoding="utf-8") as h:
+                        pass
+                    break
+                elif (prompt == 'n' or prompt == 'N'):
+                    return False
+        return True
+    
+    def initUI(self):
             
         self.table = self.construct_table(self.history)
         
@@ -67,6 +77,9 @@ class DemandQueue(QWidget):
         
         insert = QWidget(self)
         insert_layout = QHBoxLayout()
+        quick = QPushButton(insert)
+        quick.setText("快速添加")
+        quick.clicked.connect(self.quick_action)
         append = QPushButton(insert)
         append.setText("添加点播")
         append.clicked.connect(self.append_queue)
@@ -76,6 +89,7 @@ class DemandQueue(QWidget):
         pop = QPushButton(insert)
         pop.setText("完成点播")
         pop.clicked.connect(self.pop_queue)
+        insert_layout.addWidget(quick)
         insert_layout.addWidget(append)
         insert_layout.addWidget(push)
         insert_layout.addWidget(pop)
@@ -107,8 +121,7 @@ class DemandQueue(QWidget):
         self.setGeometry(0, 0, 960, 960)
         self.setLayout(self.layout)
         
-        
-    def construct_table(self, queue: deque[dict]) -> QTableWidget:
+    def construct_table(self, queue: deque[list]) -> QTableWidget:
         table = QTableWidget(self)
         n = len(queue)
         table.setRowCount(n)
@@ -118,11 +131,27 @@ class DemandQueue(QWidget):
         table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
         table.setColumnWidth(2, 150)
+        table.cellDoubleClicked.connect(self.showDemand)
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
         for i in range(n):
-            table.setItem(i, 0, QTableWidgetItem(queue[i]['name']))
-            table.setItem(i, 1, QTableWidgetItem(queue[i]['desc']))
-            table.setItem(i, 2, QTableWidgetItem(queue[i]['date']))
+            table.setItem(i, 0, QTableWidgetItem(queue[i][0]))
+            table.setItem(i, 1, QTableWidgetItem(queue[i][1]))
+            table.setItem(i, 2, QTableWidgetItem(queue[i][2]))
         return table
+    
+    def showDemand(self, row, col):
+        demand = self.history[row]
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f'点播详情')
+        dialog.setMinimumSize(480, 270)
+        dialog_layout = QVBoxLayout()
+        dialog_layout.addWidget(QLabel(f'{demand[0]}的点播'), alignment=Qt.AlignCenter)
+        info = QLabel(demand[1], dialog)
+        info.setWordWrap(True)
+        dialog_layout.addWidget(info, alignment=Qt.AlignCenter)
+        dialog_layout.addWidget(QLabel(f'于{demand[2]}', dialog), alignment=Qt.AlignCenter)
+        dialog.setLayout(dialog_layout)
+        dialog.exec()
 
     def append_queue(self):
         self.insert_queue(self.table.rowCount())
@@ -137,15 +166,15 @@ class DemandQueue(QWidget):
             return
         self.history.popleft()
         self.table.removeRow(0)
+        
+        self.onlyInt.setTop(self.table.rowCount())
+        self.updateCSV()
     
     def insert_queue(self, row=None):
         name = self.name.toPlainText()
         desc = self.desc.toPlainText()
         date = self.date.toPlainText()
-        new = {}
-        new['name'] = name
-        new['desc'] = desc
-        new['date'] = date
+        new = [name, desc, date]
         if row == None:
             # Inserting
             row = int(self.insert_place.toPlainText())
@@ -161,10 +190,64 @@ class DemandQueue(QWidget):
         self.table.setItem(row, 0, QTableWidgetItem(name))
         self.table.setItem(row, 1, QTableWidgetItem(desc))
         self.table.setItem(row, 2, QTableWidgetItem(date))
+        
+        self.onlyInt.setTop(self.table.rowCount())
+        self.updateCSV()
     
-    def updateJSON(self):
-        with open('history.json', "w") as h:
-            h.write(json.dumps(list(self.history)))
+    def quick_action(self):
+        # Save the csv file before using buggy feature
+        self.updateCSV()
+        hint = "请输入以下格式点播：\n"
+        hint += "[老板名称]\n"
+        hint += "[点播内容]\n"
+        hint += "[点播时间]\n"
+        hint += "请用分号\";\"分隔多个点播\n"
+        hint += "请注意：多个点播不支持插播"
+        text, ok = QInputDialog.getMultiLineText(self, "快速输入", 
+            hint)
 
-    def __del__(self):
-        self.updateJSON()
+        if ok:
+            table = str(text).split(";")
+            if len(table) > 1:
+                for line in table:
+                    if not line:
+                        continue
+                    row = [s for s in line.split("\n") if s]
+                    # Appending
+                    name = row[0]
+                    date = row[-1]
+                    desc = "\n".join(row[1:-1])
+                    self.history.append(row)
+                    n = self.table.rowCount()
+                    self.table.insertRow(n)
+                    self.table.setItem(n, 0, QTableWidgetItem(name))
+                    self.table.setItem(n, 1, QTableWidgetItem(desc))
+                    self.table.setItem(n, 2, QTableWidgetItem(date))
+            else:
+                row = [s for s in str(text).split("\n") if s]
+                name = row[0]
+                date = row[-1]
+                desc = "\n".join(row[1:-1])
+                self.name.setText(name)
+                self.desc.setText(desc)
+                self.date.setText(date)
+        
+        self.onlyInt.setTop(self.table.rowCount())
+        self.updateCSV()
+    
+    def updateCSV(self):
+        # print(self.history)
+        with open('history.csv', "w", encoding="utf-8") as h:
+            writer = csv.writer(h, delimiter=",", lineterminator="\n")
+            for line in self.history:
+                writer.writerow(line)
+        
+if __name__ == "__main__":
+    qApp = QApplication(sys.argv)
+    window = QWidget()
+    dq = DemandQueue(window)
+    window.setWindowTitle("点播队列")
+    window.resize(960, 960)
+    window.show()
+    
+    sys.exit(qApp.exec_())
