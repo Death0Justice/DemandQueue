@@ -141,10 +141,8 @@ class DemandQueue(QWidget):
         table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
         table.setColumnWidth(2, 170)
-        table.cellDoubleClicked.connect(self.showDemand)
         table.setContextMenuPolicy(Qt.CustomContextMenu)
         table.customContextMenuRequested.connect(self.contextMenu)
-        table.setEditTriggers(QTableWidget.NoEditTriggers)
         for i in range(n):
             table.setItem(i, 0, QTableWidgetItem(queue[i][0]))
             table.setItem(i, 1, QTableWidgetItem(queue[i][1]))
@@ -154,21 +152,16 @@ class DemandQueue(QWidget):
     def contextMenu(self):
         pos = QCursor.pos()
         item_pos = self.table.viewport().mapFromGlobal(pos)
-        print(f'Menu opened at ({pos.x()}, {pos.y()})')
-        print(f'Retreiving item at ({item_pos.x()}, {item_pos.y()})')
         item = self.table.itemAt(item_pos)
-        print(f'Dealing with item {item.text()}')
+        # print(f'Dealing with item {item.text()}')
         menu = QMenu(self.table)
-        edit = QAction("编辑", menu)
-        edit.triggered.connect(partial(self.editCell, item))
+        edit = QAction("详情", menu)
+        edit.triggered.connect(partial(self.showDemand, item))
         delete = QAction("删除点播", menu)
         delete.triggered.connect(partial(self.deleteDemand, item))
         menu.addAction(edit)
         menu.addAction(delete)
         menu.exec_(pos)
-    
-    def editCell(self, item: QTableWidgetItem):
-        self.table.editItem(item)
     
     def deleteDemand(self, item: QTableWidgetItem):
         row = item.row()
@@ -177,21 +170,21 @@ class DemandQueue(QWidget):
         
         self.onlyInt.setTop(self.table.rowCount())
     
-    def showDemand(self, row, col):
-        if col == 1:
-            demand = self.history[row]
-            dialog = QDialog(self)
-            dialog.setWindowTitle(f'点播详情')
-            dialog.setWindowIcon(QIcon('isaac.ico'))
-            dialog.setMinimumSize(480, 270)
-            dialog_layout = QVBoxLayout()
-            dialog_layout.addWidget(QLabel(f'{demand[0]}的点播'), alignment=Qt.AlignCenter)
-            info = QLabel(demand[1], dialog)
-            info.setWordWrap(True)
-            dialog_layout.addWidget(info, alignment=Qt.AlignCenter)
-            dialog_layout.addWidget(QLabel(f'于{demand[2]}', dialog), alignment=Qt.AlignCenter)
-            dialog.setLayout(dialog_layout)
-            dialog.exec()
+    def showDemand(self, item: QTableWidgetItem):
+        row = item.row()
+        demand = self.history[row]
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f'点播详情')
+        dialog.setWindowIcon(QIcon('isaac.ico'))
+        dialog.setMinimumSize(480, 270)
+        dialog_layout = QVBoxLayout()
+        dialog_layout.addWidget(QLabel(f'{demand[0]}的点播'), alignment=Qt.AlignCenter)
+        info = QLabel(demand[1], dialog)
+        info.setWordWrap(True)
+        dialog_layout.addWidget(info, alignment=Qt.AlignCenter)
+        dialog_layout.addWidget(QLabel(f'于{demand[2]}', dialog), alignment=Qt.AlignCenter)
+        dialog.setLayout(dialog_layout)
+        dialog.exec()
         
     def insert_anywhere(self):
         self.insert_queue()
