@@ -1,8 +1,9 @@
 from collections import deque
+from functools import partial
 import csv, sys
 from datetime import datetime
 from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QIntValidator, QIcon, QCloseEvent, QKeySequence
+from PyQt5.QtGui import QIntValidator, QIcon, QCloseEvent, QKeySequence, QCursor
 from PyQt5.QtCore import Qt
         
 class DemandQueue(QWidget):
@@ -141,12 +142,40 @@ class DemandQueue(QWidget):
         table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
         table.setColumnWidth(2, 170)
         table.cellDoubleClicked.connect(self.showDemand)
+        table.setContextMenuPolicy(Qt.CustomContextMenu)
+        table.customContextMenuRequested.connect(self.contextMenu)
         table.setEditTriggers(QTableWidget.NoEditTriggers)
         for i in range(n):
             table.setItem(i, 0, QTableWidgetItem(queue[i][0]))
             table.setItem(i, 1, QTableWidgetItem(queue[i][1]))
             table.setItem(i, 2, QTableWidgetItem(queue[i][2]))
         return table
+
+    def contextMenu(self):
+        pos = QCursor.pos()
+        item_pos = self.table.viewport().mapFromGlobal(pos)
+        print(f'Menu opened at ({pos.x()}, {pos.y()})')
+        print(f'Retreiving item at ({item_pos.x()}, {item_pos.y()})')
+        item = self.table.itemAt(item_pos)
+        print(f'Dealing with item {item.text()}')
+        menu = QMenu(self.table)
+        edit = QAction("编辑", menu)
+        edit.triggered.connect(partial(self.editCell, item))
+        delete = QAction("删除点播", menu)
+        delete.triggered.connect(partial(self.deleteDemand, item))
+        menu.addAction(edit)
+        menu.addAction(delete)
+        menu.exec_(pos)
+    
+    def editCell(self, item: QTableWidgetItem):
+        self.table.editItem(item)
+    
+    def deleteDemand(self, item: QTableWidgetItem):
+        row = item.row()
+        del self.history[row]
+        self.table.removeRow(row)
+        
+        self.onlyInt.setTop(self.table.rowCount())
     
     def showDemand(self, row, col):
         if col == 1:
@@ -321,7 +350,7 @@ if __name__ == "__main__":
     dq = DemandQueue()
     dq.setWindowTitle("点播队列")
     dq.setWindowIcon(QIcon('isaac.ico'))
-    dq.resize(960, 960)
+    dq.setFixedSize(960, 960)
     # Center the window
     qr = dq.frameGeometry()
     cp = QDesktopWidget().availableGeometry().center()
