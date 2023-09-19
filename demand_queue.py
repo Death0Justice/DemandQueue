@@ -2,8 +2,8 @@ from collections import deque
 import csv, sys
 from datetime import datetime
 from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QIntValidator, QCursor, QCloseEvent, QKeySequence
-from PyQt5.QtCore import Qt, QPoint
+from PyQt5.QtGui import QIntValidator, QIcon, QCloseEvent, QKeySequence
+from PyQt5.QtCore import Qt
         
 class DemandQueue(QWidget):
 
@@ -153,6 +153,7 @@ class DemandQueue(QWidget):
             demand = self.history[row]
             dialog = QDialog(self)
             dialog.setWindowTitle(f'点播详情')
+            dialog.setWindowIcon(QIcon('isaac.ico'))
             dialog.setMinimumSize(480, 270)
             dialog_layout = QVBoxLayout()
             dialog_layout.addWidget(QLabel(f'{demand[0]}的点播'), alignment=Qt.AlignCenter)
@@ -280,6 +281,7 @@ class DemandQueue(QWidget):
         
         conclusion = QDialog(self)
         conclusion.setWindowTitle("排序结果")
+        conclusion.setWindowIcon(QIcon('isaac.ico'))
         congrats = QLabel("排序完成！", conclusion)
         result = QLabel(f'发现{len(unformatted_history)}个格式错误的点播。', conclusion)
         conclusion_layout = QVBoxLayout()
@@ -318,6 +320,7 @@ if __name__ == "__main__":
     qApp = QApplication(sys.argv)
     dq = DemandQueue()
     dq.setWindowTitle("点播队列")
+    dq.setWindowIcon(QIcon('isaac.ico'))
     dq.resize(960, 960)
     # Center the window
     qr = dq.frameGeometry()
