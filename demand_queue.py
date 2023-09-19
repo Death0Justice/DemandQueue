@@ -104,12 +104,15 @@ class DemandQueue(QWidget):
         insert_button.clicked.connect(self.insert_anywhere)
         sort_button = QPushButton("按时间排序")
         sort_button.clicked.connect(self.sort)
+        delete_button = QPushButton("删除错误格式点播", insert_anywhere)
+        delete_button.clicked.connect(self.del_unformatted)
         ia_layout.addStretch()
         ia_layout.addWidget(insert_text1)
         ia_layout.addWidget(self.insert_place)
         ia_layout.addWidget(insert_text2)
         ia_layout.addWidget(insert_button)
         ia_layout.addWidget(sort_button)
+        ia_layout.addWidget(delete_button)
         ia_layout.addStretch()
         insert_anywhere.setLayout(ia_layout)
         
@@ -141,18 +144,19 @@ class DemandQueue(QWidget):
         return table
     
     def showDemand(self, row, col):
-        demand = self.history[row]
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f'点播详情')
-        dialog.setMinimumSize(480, 270)
-        dialog_layout = QVBoxLayout()
-        dialog_layout.addWidget(QLabel(f'{demand[0]}的点播'), alignment=Qt.AlignCenter)
-        info = QLabel(demand[1], dialog)
-        info.setWordWrap(True)
-        dialog_layout.addWidget(info, alignment=Qt.AlignCenter)
-        dialog_layout.addWidget(QLabel(f'于{demand[2]}', dialog), alignment=Qt.AlignCenter)
-        dialog.setLayout(dialog_layout)
-        dialog.exec()
+        if col == 1:
+            demand = self.history[row]
+            dialog = QDialog(self)
+            dialog.setWindowTitle(f'点播详情')
+            dialog.setMinimumSize(480, 270)
+            dialog_layout = QVBoxLayout()
+            dialog_layout.addWidget(QLabel(f'{demand[0]}的点播'), alignment=Qt.AlignCenter)
+            info = QLabel(demand[1], dialog)
+            info.setWordWrap(True)
+            dialog_layout.addWidget(info, alignment=Qt.AlignCenter)
+            dialog_layout.addWidget(QLabel(f'于{demand[2]}', dialog), alignment=Qt.AlignCenter)
+            dialog.setLayout(dialog_layout)
+            dialog.exec()
         
     def insert_anywhere(self):
         self.insert_queue()
@@ -171,6 +175,15 @@ class DemandQueue(QWidget):
         self.history.popleft()
         self.table.removeRow(0)
         
+        self.onlyInt.setTop(self.table.rowCount())
+        self.updateCSV()
+    
+    def del_unformatted(self):
+        if len(self.history) == 0:
+            return
+        while not self.validate(self.history[-1][2]):
+            self.history.pop()
+            self.table.removeRow(self.table.rowCount() - 1)
         self.onlyInt.setTop(self.table.rowCount())
         self.updateCSV()
     
@@ -243,20 +256,38 @@ class DemandQueue(QWidget):
     def sort(self):
         push_history = []
         append_history = []
+        unformatted_history = []
         for h in self.history:
-            if str(h[1]).startswith("插播"):
-                push_history.append(h)
+            if self.validate(h[2]):
+                if str(h[1]).startswith("插播"):
+                    push_history.append(h)
+                else:
+                    datetime.strptime(h[2], self.date_format)
+                    append_history.append(h)
             else:
-                append_history.append(h)
+                unformatted_history.append(h)
         push_history.sort(key=lambda h: datetime.strptime(h[2], self.date_format), reverse=True)
         append_history.sort(key=lambda h: datetime.strptime(h[2], self.date_format))
-        self.history = deque(push_history + append_history)
+        
+        self.history = deque(push_history + append_history + unformatted_history)
         # print(self.history)
         self.table.clearContents()
         for i, h in enumerate(self.history):
             self.table.setItem(i, 0, QTableWidgetItem(h[0]))
             self.table.setItem(i, 1, QTableWidgetItem(h[1]))
             self.table.setItem(i, 2, QTableWidgetItem(h[2]))
+        
+        conclusion = QDialog(self)
+        conclusion.setWindowTitle("排序结果")
+        congrats = QLabel("排序完成！", conclusion)
+        result = QLabel(f'发现{len(unformatted_history)}个格式错误的点播。', conclusion)
+        conclusion_layout = QVBoxLayout()
+        conclusion_layout.addWidget(congrats, alignment=Qt.AlignCenter)
+        conclusion_layout.addWidget(result, alignment=Qt.AlignCenter)
+        conclusion.setLayout(conclusion_layout)
+        conclusion.setMinimumSize(480, 270)
+        conclusion.exec()
+        self.updateCSV()
     
     def updateCSV(self):
         # print(self.history)
@@ -264,6 +295,13 @@ class DemandQueue(QWidget):
             writer = csv.writer(h, delimiter=",", lineterminator="\n")
             for line in self.history:
                 writer.writerow(line)
+    
+    def validate(self, date_str: str) -> bool:
+        try:
+            datetime.strptime(date_str, self.date_format)
+            return True
+        except:
+            return False
         
 if __name__ == "__main__":
     qApp = QApplication(sys.argv)
