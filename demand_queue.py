@@ -143,6 +143,7 @@ class DemandQueue(QWidget):
         table.setColumnWidth(2, 170)
         table.setContextMenuPolicy(Qt.CustomContextMenu)
         table.customContextMenuRequested.connect(self.contextMenu)
+        table.itemChanged.connect(self.updateHistory)
         for i in range(n):
             table.setItem(i, 0, QTableWidgetItem(queue[i][0]))
             table.setItem(i, 1, QTableWidgetItem(queue[i][1]))
@@ -164,6 +165,8 @@ class DemandQueue(QWidget):
         menu.exec_(pos)
     
     def deleteDemand(self, item: QTableWidgetItem):
+        if len(self.history) == 0:
+            return
         row = item.row()
         del self.history[row]
         self.table.removeRow(row)
@@ -171,6 +174,8 @@ class DemandQueue(QWidget):
         self.onlyInt.setTop(self.table.rowCount())
     
     def showDemand(self, item: QTableWidgetItem):
+        if not item:
+            return
         row = item.row()
         demand = self.history[row]
         dialog = QDialog(self)
@@ -185,6 +190,13 @@ class DemandQueue(QWidget):
         dialog_layout.addWidget(QLabel(f'于{demand[2]}', dialog), alignment=Qt.AlignCenter)
         dialog.setLayout(dialog_layout)
         dialog.exec()
+        
+    def updateHistory(self, item: QTableWidgetItem):
+        if not item:
+            return
+        row = item.row()
+        col = item.column()
+        self.history[row][col] = item.text()
         
     def insert_anywhere(self):
         self.insert_queue()
