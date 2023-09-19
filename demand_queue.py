@@ -2,7 +2,7 @@ from collections import deque
 import csv, sys
 from datetime import datetime
 from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QIntValidator, QCursor
+from PyQt5.QtGui import QIntValidator, QCursor, QCloseEvent, QKeySequence
 from PyQt5.QtCore import Qt, QPoint
         
 class DemandQueue(QWidget):
@@ -10,10 +10,15 @@ class DemandQueue(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.date_format = '%Y-%m-%d %H:%M'
+        self.initShortcut()
         if not self.initHistory():
             return
         self.initUI()
-    
+        
+    def initShortcut(self):
+        shortcut = QShortcut(QKeySequence('Ctrl+S'), self)
+        shortcut.activated.connect(self.updateCSV)
+        
     def initHistory(self) -> bool:
         self.history = deque()
         try:
@@ -176,7 +181,6 @@ class DemandQueue(QWidget):
         self.table.removeRow(0)
         
         self.onlyInt.setTop(self.table.rowCount())
-        self.updateCSV()
     
     def del_unformatted(self):
         if len(self.history) == 0:
@@ -185,7 +189,6 @@ class DemandQueue(QWidget):
             self.history.pop()
             self.table.removeRow(self.table.rowCount() - 1)
         self.onlyInt.setTop(self.table.rowCount())
-        self.updateCSV()
     
     def insert_queue(self, row=None):
         name = self.name.toPlainText()
@@ -210,11 +213,10 @@ class DemandQueue(QWidget):
         self.table.setItem(row, 2, QTableWidgetItem(new[2]))
         
         self.onlyInt.setTop(self.table.rowCount())
-        self.updateCSV()
     
     def quick_action(self):
-        # Save the csv file before using buggy feature
-        self.updateCSV()
+        # # Save the csv file before using buggy feature
+        # self.updateCSV()
         hint = "请输入以下格式点播：\n"
         hint += "[老板名称]\n"
         hint += "[点播内容]\n"
@@ -235,7 +237,7 @@ class DemandQueue(QWidget):
                     name = row[0]
                     date = row[-1]
                     desc = "\n".join(row[1:-1])
-                    self.history.append(row)
+                    self.history.append([name, desc, date])
                     n = self.table.rowCount()
                     self.table.insertRow(n)
                     self.table.setItem(n, 0, QTableWidgetItem(name))
@@ -251,7 +253,6 @@ class DemandQueue(QWidget):
                 self.date.setText(date)
         
         self.onlyInt.setTop(self.table.rowCount())
-        self.updateCSV()
     
     def sort(self):
         push_history = []
@@ -287,7 +288,6 @@ class DemandQueue(QWidget):
         conclusion.setLayout(conclusion_layout)
         conclusion.setMinimumSize(480, 270)
         conclusion.exec()
-        self.updateCSV()
     
     def updateCSV(self):
         # print(self.history)
@@ -302,13 +302,29 @@ class DemandQueue(QWidget):
             return True
         except:
             return False
+
+    def closeEvent(self, e: QCloseEvent):
+        reply = QMessageBox.question(self, '保存', '是否保存当前点播队列？', QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
+        match reply:
+            case QMessageBox.Yes:
+                self.updateCSV()
+                e.accept()
+            case QMessageBox.No:
+                e.accept()
+            case QMessageBox.Cancel:
+                e.ignore()
         
 if __name__ == "__main__":
     qApp = QApplication(sys.argv)
-    window = QWidget()
-    dq = DemandQueue(window)
-    window.setWindowTitle("点播队列")
-    window.resize(960, 960)
-    window.show()
+    dq = DemandQueue()
+    dq.setWindowTitle("点播队列")
+    dq.resize(960, 960)
+    # Center the window
+    qr = dq.frameGeometry()
+    cp = QDesktopWidget().availableGeometry().center()
+    qr.moveCenter(cp)
+    dq.move(qr.topLeft())
+    
+    dq.show()
     
     sys.exit(qApp.exec_())
