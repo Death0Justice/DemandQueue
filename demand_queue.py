@@ -11,6 +11,8 @@ class DemandQueue(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.date_format = '%Y-%m-%d %H:%M'
+        self.date_format_c = '%Y-%m-%d %H：%M'
+        self.editing = False
         self.initShortcut()
         if not self.initHistory():
             return
@@ -31,16 +33,24 @@ class DemandQueue(QWidget):
             with open('history.csv', "x", encoding="utf-8") as h:
                 pass
         except:
-            # Can be handled using a dialog window
+            # Handled using console
             # print('File corrupted, recreating? Y/N')
-            while True:
-                prompt = input()
-                if (prompt == 'y' or prompt == 'Y'):
-                    with open('history.csv', "w", encoding="utf-8") as h:
-                        pass
-                    break
-                elif (prompt == 'n' or prompt == 'N'):
-                    return False
+            # while True:
+            #     prompt = input()
+            #     if (prompt == 'y' or prompt == 'Y'):
+            #         with open('history.csv', "w", encoding="utf-8") as h:
+            #             pass
+            #         break
+            #     elif (prompt == 'n' or prompt == 'N'):
+            #         return False
+            
+            # Handled using a dialog window
+            prompt = Popup('存储文件损坏', '存储文件已损坏，是否初始化？注意！初始化将会删除文件所有内容！', ['是，初始化', '否，我会自己处理'], QIcon('isaac.ico'))
+            if prompt == '是，初始化':
+                with open('history.csv', "w", encoding="utf-8") as _:
+                    pass
+            else:
+                return False
         return True
     
     def initUI(self):
@@ -181,7 +191,8 @@ class DemandQueue(QWidget):
         dialog = QDialog(self)
         dialog.setWindowTitle(f'点播详情')
         dialog.setWindowIcon(QIcon('isaac.ico'))
-        dialog.setMinimumSize(480, 270)
+        dialog.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
+        dialog.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         dialog_layout = QVBoxLayout()
         dialog_layout.addWidget(QLabel(f'{demand[0]}的点播'), alignment=Qt.AlignCenter)
         info = QLabel(demand[1], dialog)
@@ -215,6 +226,7 @@ class DemandQueue(QWidget):
         self.history.popleft()
         self.table.removeRow(0)
         
+        self.editing = True
         self.onlyInt.setTop(self.table.rowCount())
     
     def del_unformatted(self):
@@ -223,6 +235,7 @@ class DemandQueue(QWidget):
         while not self.validate(self.history[-1][2]):
             self.history.pop()
             self.table.removeRow(self.table.rowCount() - 1)
+        self.editing = True
         self.onlyInt.setTop(self.table.rowCount())
     
     def insert_queue(self, row=None):
@@ -247,6 +260,7 @@ class DemandQueue(QWidget):
         self.table.setItem(row, 1, QTableWidgetItem(new[1]))
         self.table.setItem(row, 2, QTableWidgetItem(new[2]))
         
+        self.editing = True
         self.onlyInt.setTop(self.table.rowCount())
     
     def quick_action(self):
@@ -258,14 +272,13 @@ class DemandQueue(QWidget):
         hint += "[点播时间]\n"
         hint += "请用分号\";\"分隔多个点播\n"
         hint += "请注意：多个点播不支持插播"
-        text, ok = QInputDialog.getMultiLineText(self, "快速输入", 
-            hint)
+        text, ok = QInputDialog.getMultiLineText(self, "快速输入", hint)
 
         if ok:
             table = str(text).split(";")
             if len(table) > 1:
                 for line in table:
-                    if not line:
+                    if not line or line.isspace():
                         continue
                     row = [s for s in line.split("\n") if s]
                     # Appending
@@ -287,23 +300,26 @@ class DemandQueue(QWidget):
                 self.desc.setText(desc)
                 self.date.setText(date)
         
+        self.editing = True
         self.onlyInt.setTop(self.table.rowCount())
     
     def sort(self):
         push_history = []
         append_history = []
         unformatted_history = []
+        date_format = {}
         for h in self.history:
-            if self.validate(h[2]):
+            date_format[h[2]] = self.validate(h[2])
+            # print(date_format) if format != '' else print('None')
+            if format:
                 if str(h[1]).startswith("插播"):
                     push_history.append(h)
                 else:
-                    datetime.strptime(h[2], self.date_format)
                     append_history.append(h)
             else:
                 unformatted_history.append(h)
-        push_history.sort(key=lambda h: datetime.strptime(h[2], self.date_format), reverse=True)
-        append_history.sort(key=lambda h: datetime.strptime(h[2], self.date_format))
+        push_history.sort(key=lambda h: datetime.strptime(h[2], date_format[h[2]]), reverse=True)
+        append_history.sort(key=lambda h: datetime.strptime(h[2], date_format[h[2]]))
         
         self.history = deque(push_history + append_history + unformatted_history)
         # print(self.history)
@@ -313,16 +329,19 @@ class DemandQueue(QWidget):
             self.table.setItem(i, 1, QTableWidgetItem(h[1]))
             self.table.setItem(i, 2, QTableWidgetItem(h[2]))
         
+        self.editing = True
+        
         conclusion = QDialog(self)
         conclusion.setWindowTitle("排序结果")
         conclusion.setWindowIcon(QIcon('isaac.ico'))
+        conclusion.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
         congrats = QLabel("排序完成！", conclusion)
         result = QLabel(f'发现{len(unformatted_history)}个格式错误的点播。', conclusion)
         conclusion_layout = QVBoxLayout()
         conclusion_layout.addWidget(congrats, alignment=Qt.AlignCenter)
         conclusion_layout.addWidget(result, alignment=Qt.AlignCenter)
         conclusion.setLayout(conclusion_layout)
-        conclusion.setMinimumSize(480, 270)
+        conclusion.setMinimumSize(360, 160)
         conclusion.exec()
     
     def updateCSV(self):
@@ -331,24 +350,65 @@ class DemandQueue(QWidget):
             writer = csv.writer(h, delimiter=",", lineterminator="\n")
             for line in self.history:
                 writer.writerow(line)
+        self.editing = False
     
-    def validate(self, date_str: str) -> bool:
+    def validate(self, date_str: str) -> str:
         try:
             datetime.strptime(date_str, self.date_format)
-            return True
-        except:
-            return False
+            return self.date_format
+        except ValueError:
+            # print('En date match failed')
+            pass
+        
+        try:
+            datetime.strptime(date_str, self.date_format_c)
+            return self.date_format_c
+        except ValueError:
+            # print('Cn date match failed')
+            pass
+        
+        return ''
 
     def closeEvent(self, e: QCloseEvent):
-        reply = QMessageBox.question(self, '保存', '是否保存当前点播队列？', QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
-        match reply:
-            case QMessageBox.Yes:
-                self.updateCSV()
-                e.accept()
-            case QMessageBox.No:
-                e.accept()
-            case QMessageBox.Cancel:
-                e.ignore()
+        if not self.editing:
+            # Already saved or not editted at all
+            e.accept()
+        else:
+            # Unsaved edit content
+            confirm = Popup('保存','是否保存当前点播队列？', ['是', '否', '取消'], QIcon('isaac.ico'))
+            reply = confirm.do()
+            match reply:
+                case '是':
+                    self.updateCSV()
+                    e.accept()
+                case '否':
+                    e.accept()
+                case '取消':
+                    e.ignore()
+
+class Popup(QMessageBox):
+    def __init__(
+            self, 
+            title, 
+            text, 
+            buttons = ["Ok"],
+            icon = QIcon()
+        ):
+        
+        super(Popup, self).__init__()
+        self.setWindowTitle(title)
+        self.setText(text)
+        self.setWindowIcon(icon)
+        self.buttons = buttons
+        for txt in self.buttons:
+            b = QPushButton(txt)
+            self.addButton(b, QMessageBox.NoRole)
+            
+    def do(self):
+        answer = self.exec_()
+        text = self.buttons[answer]
+        return text
+        
         
 if __name__ == "__main__":
     qApp = QApplication(sys.argv)
