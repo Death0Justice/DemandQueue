@@ -1,6 +1,6 @@
 from collections import deque
 from functools import partial
-import csv, sys
+import sys, openpyxl
 from datetime import datetime
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QIntValidator, QIcon, QCloseEvent, QKeySequence, QCursor
@@ -14,48 +14,32 @@ class DemandQueue(QWidget):
         self.date_format_c = '%Y-%m-%d %H：%M'
         self.editing = False
         self.initShortcut()
-        if not self.initHistory():
-            return
+        self.initHistory()
         self.initUI()
         
     def initShortcut(self):
         shortcut = QShortcut(QKeySequence('Ctrl+S'), self)
-        shortcut.activated.connect(self.updateCSV)
+        shortcut.activated.connect(self.updateXLSX)
         
     def initHistory(self) -> bool:
-        self.history = deque()
+        self.queue = deque()
         try:
-            with open('history.csv', "r", encoding="utf-8") as h:
-                reader = csv.reader(h, delimiter=',')
-                for line in reader:
-                    self.history.append(line)
-        except FileNotFoundError:
-            with open('history.csv', "x", encoding="utf-8") as h:
-                pass
+            h = openpyxl.load_workbook('history.xlsx')
         except:
-            # Handled using console
-            # print('File corrupted, recreating? Y/N')
-            # while True:
-            #     prompt = input()
-            #     if (prompt == 'y' or prompt == 'Y'):
-            #         with open('history.csv', "w", encoding="utf-8") as h:
-            #             pass
-            #         break
-            #     elif (prompt == 'n' or prompt == 'N'):
-            #         return False
-            
-            # Handled using a dialog window
-            prompt = Popup('存储文件损坏', '存储文件已损坏，是否初始化？注意！初始化将会删除文件所有内容！', ['是，初始化', '否，我会自己处理'], QIcon('isaac.ico'))
-            if prompt == '是，初始化':
-                with open('history.csv', "w", encoding="utf-8") as _:
-                    pass
-            else:
-                return False
-        return True
+            h = openpyxl.Workbook()
+            h.active.title = '待完成点播'
+            h.create_sheet('已完成点播')
+            h.save('history.xlsx')
+        
+        for row in h['待完成点播'].values:
+            self.queue.append(list(row))
+        self.history_sheet = h['已完成点播']
+        
+        self.history_book = h
     
     def initUI(self):
             
-        self.table = self.construct_table(self.history)
+        self.table = self.construct_table(self.queue)
         
         # Constraint on self.insert_place
         self.onlyInt = QIntValidator(self)
@@ -170,24 +154,40 @@ class DemandQueue(QWidget):
         edit.triggered.connect(partial(self.showDemand, item))
         delete = QAction("删除点播", menu)
         delete.triggered.connect(partial(self.deleteDemand, item))
+        complete = QAction("完成点播", menu)
+        complete.triggered.connect(partial(self.completeDemand, item))
         menu.addAction(edit)
         menu.addAction(delete)
+        menu.addAction(complete)
         menu.exec_(pos)
     
     def deleteDemand(self, item: QTableWidgetItem):
-        if len(self.history) == 0:
+        if len(self.queue) == 0:
             return
         row = item.row()
-        del self.history[row]
+        del self.queue[row]
         self.table.removeRow(row)
         
         self.onlyInt.setTop(self.table.rowCount())
+        self.editing = True
+    
+    def completeDemand(self, item: QTableWidgetItem):
+        if len(self.queue) == 0:
+            return
+        row = item.row()
+        done = self.queue[row]
+        self.history_sheet.append(done)
+        del self.queue[row]
+        self.table.removeRow(row)
+        
+        self.onlyInt.setTop(self.table.rowCount())
+        self.editing = True
     
     def showDemand(self, item: QTableWidgetItem):
         if not item:
             return
         row = item.row()
-        demand = self.history[row]
+        demand = self.queue[row]
         dialog = QDialog(self)
         dialog.setWindowTitle(f'点播详情')
         dialog.setWindowIcon(QIcon('isaac.ico'))
@@ -207,7 +207,8 @@ class DemandQueue(QWidget):
             return
         row = item.row()
         col = item.column()
-        self.history[row][col] = item.text()
+        self.queue[row][col] = item.text()
+        self.editing = True
         
     def insert_anywhere(self):
         self.insert_queue()
@@ -219,21 +220,22 @@ class DemandQueue(QWidget):
         self.insert_queue(0)
         
     def pop_queue(self):
-        if len(self.history) == 0:
+        if len(self.queue) == 0:
             # Empty history
             # Can add pop-up here
             return
-        self.history.popleft()
+        done = self.queue.popleft()
+        self.history_sheet.append(done)
         self.table.removeRow(0)
         
         self.editing = True
         self.onlyInt.setTop(self.table.rowCount())
     
     def del_unformatted(self):
-        if len(self.history) == 0:
+        if len(self.queue) == 0:
             return
-        while not self.validate(self.history[-1][2]):
-            self.history.pop()
+        while not self.validate(self.queue[-1][2]):
+            self.queue.pop()
             self.table.removeRow(self.table.rowCount() - 1)
         self.editing = True
         self.onlyInt.setTop(self.table.rowCount())
@@ -246,14 +248,14 @@ class DemandQueue(QWidget):
         if row == None:
             # Inserting
             row = int(self.insert_place.text()) - 1
-            self.history.insert(row, new)
+            self.queue.insert(row, new)
         elif row == 0:
             # Pushing
             new = [new[0], "插播: " + new[1], new[2]]
-            self.history.appendleft(new)
+            self.queue.appendleft(new)
         elif row == self.table.rowCount():
             # Appending
-            self.history.append(new)
+            self.queue.append(new)
         
         self.table.insertRow(row)
         self.table.setItem(row, 0, QTableWidgetItem(new[0]))
@@ -265,7 +267,7 @@ class DemandQueue(QWidget):
     
     def quick_action(self):
         # # Save the csv file before using buggy feature
-        # self.updateCSV()
+        # self.updateXLSX()
         hint = "请输入以下格式点播：\n"
         hint += "[老板名称]\n"
         hint += "[点播内容]\n"
@@ -285,7 +287,7 @@ class DemandQueue(QWidget):
                     name = row[0]
                     date = row[-1]
                     desc = "\n".join(row[1:-1])
-                    self.history.append([name, desc, date])
+                    self.queue.append([name, desc, date])
                     n = self.table.rowCount()
                     self.table.insertRow(n)
                     self.table.setItem(n, 0, QTableWidgetItem(name))
@@ -308,7 +310,7 @@ class DemandQueue(QWidget):
         append_history = []
         unformatted_history = []
         date_format = {}
-        for h in self.history:
+        for h in self.queue:
             date_format[h[2]] = self.validate(h[2])
             # print(date_format) if format != '' else print('None')
             if format:
@@ -321,10 +323,10 @@ class DemandQueue(QWidget):
         push_history.sort(key=lambda h: datetime.strptime(h[2], date_format[h[2]]), reverse=True)
         append_history.sort(key=lambda h: datetime.strptime(h[2], date_format[h[2]]))
         
-        self.history = deque(push_history + append_history + unformatted_history)
-        # print(self.history)
+        self.queue = deque(push_history + append_history + unformatted_history)
+        # print(self.queue)
         self.table.clearContents()
-        for i, h in enumerate(self.history):
+        for i, h in enumerate(self.queue):
             self.table.setItem(i, 0, QTableWidgetItem(h[0]))
             self.table.setItem(i, 1, QTableWidgetItem(h[1]))
             self.table.setItem(i, 2, QTableWidgetItem(h[2]))
@@ -344,12 +346,15 @@ class DemandQueue(QWidget):
         conclusion.setMinimumSize(360, 160)
         conclusion.exec()
     
-    def updateCSV(self):
-        # print(self.history)
-        with open('history.csv', "w", encoding="utf-8") as h:
-            writer = csv.writer(h, delimiter=",", lineterminator="\n")
-            for line in self.history:
-                writer.writerow(line)
+    def updateXLSX(self):
+        # print(self.queue)
+        queue = self.history_book['待完成点播']
+        self.history_book.remove(queue)
+        self.history_book.create_sheet('待完成点播', 0)
+        queue = self.history_book['待完成点播']
+        for row in self.queue:
+            queue.append(row)
+        self.history_book.save('history.xlsx')
         self.editing = False
     
     def validate(self, date_str: str) -> str:
@@ -379,7 +384,7 @@ class DemandQueue(QWidget):
             reply = confirm.do()
             match reply:
                 case '是':
-                    self.updateCSV()
+                    self.updateXLSX()
                     e.accept()
                 case '否':
                     e.accept()
