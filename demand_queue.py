@@ -36,6 +36,13 @@ class DemandQueue(QWidget):
                 "点播内容"
             ])
             h['待完成点播'].freeze_panes = 'A2'
+            h['待完成点播'].row_dimensions[1].height = 20
+            h['待完成点播'][1][0].alignment = Alignment(horizontal='center', vertical='center')
+            h['待完成点播'][1][1].alignment = Alignment(horizontal='center', vertical='center')
+            h['待完成点播'][1][2].alignment = Alignment(horizontal='center', vertical='center')
+            h['待完成点播'].column_dimensions['A'].width = 25
+            h['待完成点播'].column_dimensions['B'].width = 18
+            h['待完成点播'].column_dimensions['C'].width = 80
             h.create_sheet('已完成点播')
             h['已完成点播'].append([
                 "老板名称",
@@ -44,6 +51,15 @@ class DemandQueue(QWidget):
                 "完成时间"
             ])
             h['已完成点播'].freeze_panes = 'A2'
+            h['已完成点播'].row_dimensions[1].height = 20
+            h['已完成点播'][1][0].alignment = Alignment(horizontal='center', vertical='center')
+            h['已完成点播'][1][1].alignment = Alignment(horizontal='center', vertical='center')
+            h['已完成点播'][1][2].alignment = Alignment(horizontal='center', vertical='center')
+            h['已完成点播'][1][3].alignment = Alignment(horizontal='center', vertical='center')
+            h['已完成点播'].column_dimensions['A'].width = 25
+            h['已完成点播'].column_dimensions['B'].width = 18
+            h['已完成点播'].column_dimensions['C'].width = 80
+            h['已完成点播'].column_dimensions['D'].width = 18
             h.save('history.xlsx')
         
         for idx, row in enumerate(h['待完成点播'].values):
@@ -354,7 +370,7 @@ class DemandQueue(QWidget):
         conclusion.setMinimumSize(360, 160)
         conclusion.exec()
     
-    def updateXLSX(self):
+    def updateXLSX(self) -> bool:
         # print(self.queue)
         queue = self.history_book['待完成点播']
         self.history_book.remove(queue)
@@ -366,11 +382,28 @@ class DemandQueue(QWidget):
             "点播内容"
         ])
         queue.freeze_panes = 'A2'
+        queue.row_dimensions[1].height = 20
+        queue[1][0].alignment = Alignment(horizontal='center', vertical='center')
+        queue[1][1].alignment = Alignment(horizontal='center', vertical='center')
+        queue[1][2].alignment = Alignment(horizontal='center', vertical='center')
+        queue.column_dimensions['A'].width = 25
+        queue.column_dimensions['B'].width = 18
+        queue.column_dimensions['C'].width = 80
         for idx, row in enumerate(self.queue):
             queue.append(row)
             queue[idx + 2][2].alignment = Alignment(wrap_text=True)
-        self.history_book.save('history.xlsx')
-        self.editing = False
+        try:
+            self.history_book.save('history.xlsx')
+            self.editing = False
+            return True
+        except PermissionError:
+            not_permitted = Popup('保存失败！', '保存失败，请查看是否有其他程序正在占用文档。请关闭占用的程序后再点击重试。', ["重试", "取消"], QIcon('isaac.ico'))
+            reply = not_permitted.do()
+            match reply:
+                case '重试':
+                    return self.updateXLSX()
+                case '取消':
+                    return False
     
     def validate(self, date_str: str) -> str:
         try:
@@ -399,8 +432,10 @@ class DemandQueue(QWidget):
             reply = confirm.do()
             match reply:
                 case '是':
-                    self.updateXLSX()
-                    e.accept()
+                    if self.updateXLSX():
+                        e.accept()
+                    else:
+                        e.ignore()
                 case '否':
                     e.accept()
                 case '取消':
