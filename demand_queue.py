@@ -93,34 +93,23 @@ class DemandQueue(QWidget):
         insert_layout.addWidget(pop)
         insert.setLayout(insert_layout)
         
-        insert_anywhere = QWidget(self)
-        ia_layout = QHBoxLayout()
-        insert_text1 = QLabel("向第", insert_anywhere)
-        self.insert_place = QLineEdit(insert_anywhere)
-        self.insert_place.setFixedWidth(50)
-        self.insert_place.setValidator(self.onlyInt)
-        insert_text2 = QLabel("行", insert_anywhere)
-        insert_button = QPushButton("插入点播", insert_anywhere)
-        insert_button.clicked.connect(self.insert_anywhere)
-        sort_button = QPushButton("按时间排序")
+        advanced = QWidget(self)
+        adv_layout = QHBoxLayout()
+        sort_button = QPushButton("按时间排序", advanced)
         sort_button.clicked.connect(self.sort)
-        delete_button = QPushButton("删除错误格式点播", insert_anywhere)
+        delete_button = QPushButton("删除错误格式点播", advanced)
         delete_button.clicked.connect(self.del_unformatted)
-        ia_layout.addStretch()
-        ia_layout.addWidget(insert_text1)
-        ia_layout.addWidget(self.insert_place)
-        ia_layout.addWidget(insert_text2)
-        ia_layout.addWidget(insert_button)
-        ia_layout.addWidget(sort_button)
-        ia_layout.addWidget(delete_button)
-        ia_layout.addStretch()
-        insert_anywhere.setLayout(ia_layout)
+        adv_layout.addStretch()
+        adv_layout.addWidget(sort_button)
+        adv_layout.addWidget(delete_button)
+        adv_layout.addStretch()
+        advanced.setLayout(adv_layout)
         
         self.layout = QVBoxLayout()
         self.layout.addWidget(self.table)
         self.layout.addWidget(edit, alignment=Qt.AlignBottom)
         self.layout.addWidget(insert, alignment=Qt.AlignBottom)
-        self.layout.addWidget(insert_anywhere, alignment=Qt.AlignBottom)
+        self.layout.addWidget(advanced, alignment=Qt.AlignBottom)
         
         self.setGeometry(0, 0, 960, 960)
         self.setLayout(self.layout)
@@ -156,9 +145,12 @@ class DemandQueue(QWidget):
         delete.triggered.connect(partial(self.deleteDemand, item))
         complete = QAction("完成点播", menu)
         complete.triggered.connect(partial(self.completeDemand, item))
+        insert = QAction("插入点播", menu)
+        insert.triggered.connect(partial(self.insert_queue, item.row()))
         menu.addAction(edit)
         menu.addAction(delete)
         menu.addAction(complete)
+        menu.addAction(insert)
         menu.exec_(pos)
     
     def deleteDemand(self, item: QTableWidgetItem):
@@ -209,15 +201,12 @@ class DemandQueue(QWidget):
         col = item.column()
         self.queue[row][col] = item.text()
         self.editing = True
-        
-    def insert_anywhere(self):
-        self.insert_queue()
 
     def append_queue(self):
         self.insert_queue(self.table.rowCount())
         
     def push_queue(self):
-        self.insert_queue(0)
+        self.insert_queue(0, cut=True)
         
     def pop_queue(self):
         if len(self.queue) == 0:
@@ -240,22 +229,18 @@ class DemandQueue(QWidget):
         self.editing = True
         self.onlyInt.setTop(self.table.rowCount())
     
-    def insert_queue(self, row=None):
+    def insert_queue(self, row, cut=False):
         name = self.name.toPlainText()
         desc = self.desc.toPlainText()
         date = self.date.toPlainText()
         new = [name, desc, date]
-        if row == None:
-            # Inserting
-            row = int(self.insert_place.text()) - 1
-            self.queue.insert(row, new)
-        elif row == 0:
+        if cut:
             # Pushing
             new = [new[0], "插播: " + new[1], new[2]]
             self.queue.appendleft(new)
-        elif row == self.table.rowCount():
-            # Appending
-            self.queue.append(new)
+        else:
+            # Appending or Inserting
+            self.queue.insert(row, new)
         
         self.table.insertRow(row)
         self.table.setItem(row, 0, QTableWidgetItem(new[0]))
