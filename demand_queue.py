@@ -23,43 +23,15 @@ class DemandQueue(QWidget):
         shortcut = QShortcut(QKeySequence('Ctrl+S'), self)
         shortcut.activated.connect(self.updateXLSX)
         
-    def initHistory(self) -> bool:
-        self.queue = deque()
+    def initHistory(self):
+        self.queue:deque[list] = deque()
         try:
             h = openpyxl.load_workbook('history.xlsx')
         except:
             h = Workbook()
             h.active.title = '待完成点播'
-            h['待完成点播'].append([
-                "老板名称",
-                "点播时间",
-                "点播内容"
-            ])
-            h['待完成点播'].freeze_panes = 'A2'
-            h['待完成点播'].row_dimensions[1].height = 20
-            h['待完成点播'][1][0].alignment = Alignment(horizontal='center', vertical='center')
-            h['待完成点播'][1][1].alignment = Alignment(horizontal='center', vertical='center')
-            h['待完成点播'][1][2].alignment = Alignment(horizontal='center', vertical='center')
-            h['待完成点播'].column_dimensions['A'].width = 25
-            h['待完成点播'].column_dimensions['B'].width = 18
-            h['待完成点播'].column_dimensions['C'].width = 80
             h.create_sheet('已完成点播')
-            h['已完成点播'].append([
-                "老板名称",
-                "点播时间",
-                "点播内容",
-                "完成时间"
-            ])
-            h['已完成点播'].freeze_panes = 'A2'
-            h['已完成点播'].row_dimensions[1].height = 20
-            h['已完成点播'][1][0].alignment = Alignment(horizontal='center', vertical='center')
-            h['已完成点播'][1][1].alignment = Alignment(horizontal='center', vertical='center')
-            h['已完成点播'][1][2].alignment = Alignment(horizontal='center', vertical='center')
-            h['已完成点播'][1][3].alignment = Alignment(horizontal='center', vertical='center')
-            h['已完成点播'].column_dimensions['A'].width = 25
-            h['已完成点播'].column_dimensions['B'].width = 18
-            h['已完成点播'].column_dimensions['C'].width = 80
-            h['已完成点播'].column_dimensions['D'].width = 18
+            self.initHeaders(h, True)
             h.save('history.xlsx')
         
         for idx, row in enumerate(h['待完成点播'].values):
@@ -69,6 +41,41 @@ class DemandQueue(QWidget):
         self.history_sheet = h['已完成点播']
         
         self.history_book = h
+    
+    def initHeaders(self, h: Workbook, first=False):
+        h['待完成点播'].append([
+            "老板名称",
+            "点播时间",
+            "点播内容"
+        ])
+        h['待完成点播'].freeze_panes = 'A2'
+        h['待完成点播'].row_dimensions[1].height = 20
+        h['待完成点播'][1][0].alignment = Alignment(horizontal='center', vertical='center')
+        h['待完成点播'][1][1].alignment = Alignment(horizontal='center', vertical='center')
+        h['待完成点播'][1][2].alignment = Alignment(horizontal='center', vertical='center')
+        h['待完成点播'].column_dimensions['A'].width = 25
+        h['待完成点播'].column_dimensions['B'].width = 18
+        h['待完成点播'].column_dimensions['C'].width = 80
+        
+        if first:
+            # Because completed list is not truncated
+            # after creation, do not append the headers
+            h['已完成点播'].append([
+                "老板名称",
+                "点播时间",
+                "点播内容",
+                "完成时间"
+            ])
+        h['已完成点播'].freeze_panes = 'A2'
+        h['已完成点播'].row_dimensions[1].height = 20
+        h['已完成点播'][1][0].alignment = Alignment(horizontal='center', vertical='center')
+        h['已完成点播'][1][1].alignment = Alignment(horizontal='center', vertical='center')
+        h['已完成点播'][1][2].alignment = Alignment(horizontal='center', vertical='center')
+        h['已完成点播'][1][3].alignment = Alignment(horizontal='center', vertical='center')
+        h['已完成点播'].column_dimensions['A'].width = 25
+        h['已完成点播'].column_dimensions['B'].width = 18
+        h['已完成点播'].column_dimensions['C'].width = 80
+        h['已完成点播'].column_dimensions['D'].width = 18
     
     def initUI(self):
             
@@ -201,6 +208,8 @@ class DemandQueue(QWidget):
             return
         row = item.row()
         done = self.queue[row]
+        now = datetime.now()
+        done.append(now.strftime(self.date_format))
         self.history_sheet.append(done)
         last = self.history_sheet.max_row
         self.history_sheet[last][2].alignment = Alignment(wrap_text=True)
@@ -275,7 +284,7 @@ class DemandQueue(QWidget):
         new = [name, date, desc]
         if cut:
             # Pushing
-            new = [new[0], "插播: " + new[1], new[2]]
+            new = [new[0], new[1], "插播: " + new[2]]
             self.queue.appendleft(new)
         else:
             # Appending or Inserting
@@ -335,9 +344,10 @@ class DemandQueue(QWidget):
         unformatted_queue = []
         date_format = {}
         for h in self.queue:
-            date_format[h[1]] = self.validate(h[1])
+            f = self.validate(h[1])
             # print(date_format) if format != '' else print('None')
-            if format:
+            if f:
+                date_format[h[1]] = f
                 if str(h[2]).startswith("插播"):
                     cut_queue.append(h)
                 else:
@@ -375,20 +385,8 @@ class DemandQueue(QWidget):
         queue = self.history_book['待完成点播']
         self.history_book.remove(queue)
         self.history_book.create_sheet('待完成点播', 0)
+        self.initHeaders(self.history_book)
         queue = self.history_book['待完成点播']
-        queue.append([
-            "老板名称",
-            "点播时间",
-            "点播内容"
-        ])
-        queue.freeze_panes = 'A2'
-        queue.row_dimensions[1].height = 20
-        queue[1][0].alignment = Alignment(horizontal='center', vertical='center')
-        queue[1][1].alignment = Alignment(horizontal='center', vertical='center')
-        queue[1][2].alignment = Alignment(horizontal='center', vertical='center')
-        queue.column_dimensions['A'].width = 25
-        queue.column_dimensions['B'].width = 18
-        queue.column_dimensions['C'].width = 80
         for idx, row in enumerate(self.queue):
             queue.append(row)
             queue[idx + 2][2].alignment = Alignment(wrap_text=True)
