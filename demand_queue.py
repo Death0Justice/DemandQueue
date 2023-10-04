@@ -2,7 +2,7 @@ from collections import deque
 from functools import partial
 import sys, openpyxl
 from openpyxl import Workbook
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, NamedStyle
 from datetime import datetime
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QIntValidator, QIcon, QCloseEvent, QKeySequence, QCursor
@@ -37,7 +37,10 @@ class DemandQueue(QWidget):
         for idx, row in enumerate(h['待完成点播'].values):
             if idx == 0:
                 continue
-            self.queue.append(list(row))
+            demand = list(row)
+            if isinstance(demand[1], datetime):
+                demand[1] = datetime.strftime(demand[1], self.date_format)
+            self.queue.append(demand)
         self.history_sheet = h['已完成点播']
         
         self.history_book = h
@@ -58,6 +61,11 @@ class DemandQueue(QWidget):
         h['待完成点播'].column_dimensions['C'].width = 80
         
         if first:
+            # Because named styles only
+            # needs to be added once
+            date_style = NamedStyle(name='custom_datetime', number_format='YYYY-MM-DD HH:MM')
+            h.add_named_style(date_style)
+            
             # Because completed list is not truncated
             # after creation, do not append the headers
             h['已完成点播'].append([
@@ -66,24 +74,20 @@ class DemandQueue(QWidget):
                 "点播内容",
                 "完成时间"
             ])
-        h['已完成点播'].freeze_panes = 'A2'
-        h['已完成点播'].row_dimensions[1].height = 20
-        h['已完成点播'][1][0].alignment = Alignment(horizontal='center', vertical='center')
-        h['已完成点播'][1][1].alignment = Alignment(horizontal='center', vertical='center')
-        h['已完成点播'][1][2].alignment = Alignment(horizontal='center', vertical='center')
-        h['已完成点播'][1][3].alignment = Alignment(horizontal='center', vertical='center')
-        h['已完成点播'].column_dimensions['A'].width = 25
-        h['已完成点播'].column_dimensions['B'].width = 18
-        h['已完成点播'].column_dimensions['C'].width = 80
-        h['已完成点播'].column_dimensions['D'].width = 18
+            h['已完成点播'].freeze_panes = 'A2'
+            h['已完成点播'].row_dimensions[1].height = 20
+            h['已完成点播'][1][0].alignment = Alignment(horizontal='center', vertical='center')
+            h['已完成点播'][1][1].alignment = Alignment(horizontal='center', vertical='center')
+            h['已完成点播'][1][2].alignment = Alignment(horizontal='center', vertical='center')
+            h['已完成点播'][1][3].alignment = Alignment(horizontal='center', vertical='center')
+            h['已完成点播'].column_dimensions['A'].width = 25
+            h['已完成点播'].column_dimensions['B'].width = 18
+            h['已完成点播'].column_dimensions['C'].width = 80
+            h['已完成点播'].column_dimensions['D'].width = 18
     
     def initUI(self):
             
         self.table = self.construct_table(self.queue)
-        
-        # Constraint on self.insert_place
-        self.onlyInt = QIntValidator(self)
-        self.onlyInt.setRange(1, self.table.rowCount())
         
         edit = QWidget(self)
         edit_layout = QHBoxLayout()
@@ -200,7 +204,6 @@ class DemandQueue(QWidget):
         del self.queue[row]
         self.table.removeRow(row)
         
-        self.onlyInt.setTop(self.table.rowCount())
         self.editing = True
     
     def completeDemand(self, item: QTableWidgetItem):
@@ -208,15 +211,17 @@ class DemandQueue(QWidget):
             return
         row = item.row()
         done = self.queue[row]
-        now = datetime.now()
-        done.append(now.strftime(self.date_format))
+        done.append(datetime.now())
+        if self.validate(done):
+            done[1] = datetime.strptime(done[1], self.date_format)
         self.history_sheet.append(done)
         last = self.history_sheet.max_row
+        self.history_sheet[last][1].style = 'custom_datetime'
         self.history_sheet[last][2].alignment = Alignment(wrap_text=True)
+        self.history_sheet[last][3].style = 'custom_datetime'
         del self.queue[row]
         self.table.removeRow(row)
         
-        self.onlyInt.setTop(self.table.rowCount())
         self.editing = True
     
     def showDemand(self, item: QTableWidgetItem):
@@ -258,24 +263,25 @@ class DemandQueue(QWidget):
             # Can add pop-up here
             return
         done = self.queue.popleft()
-        now = datetime.now()
-        done.append(now.strftime(self.date_format))
+        done.append(datetime.now())
+        if self.validate(done):
+            done[1] = datetime.strptime(done[1], self.date_format)
         self.history_sheet.append(done)
         last = self.history_sheet.max_row
+        self.history_sheet[last][1].style = 'custom_datetime'
         self.history_sheet[last][2].alignment = Alignment(wrap_text=True)
+        self.history_sheet[last][3].style = 'custom_datetime'
         self.table.removeRow(0)
         
         self.editing = True
-        self.onlyInt.setTop(self.table.rowCount())
     
     def del_unformatted(self):
         if len(self.queue) == 0:
             return
-        while self.queue and not self.validate(self.queue[-1][1]):
+        while self.queue and not self.validate(self.queue[-1]):
             self.queue.pop()
             self.table.removeRow(self.table.rowCount() - 1)
         self.editing = True
-        self.onlyInt.setTop(self.table.rowCount())
     
     def insert_queue(self, row, cut=False):
         name = self.name.toPlainText()
@@ -296,7 +302,6 @@ class DemandQueue(QWidget):
         self.table.setItem(row, 2, QTableWidgetItem(new[2]))
         
         self.editing = True
-        self.onlyInt.setTop(self.table.rowCount())
     
     def quick_action(self):
         # # Save the csv file before using buggy feature
@@ -336,26 +341,21 @@ class DemandQueue(QWidget):
                 self.desc.setText(desc)
         
         self.editing = True
-        self.onlyInt.setTop(self.table.rowCount())
     
     def sort(self):
         cut_queue = []
         normal_queue = []
         unformatted_queue = []
-        date_format = {}
         for h in self.queue:
-            f = self.validate(h[1])
-            # print(date_format) if format != '' else print('None')
-            if f:
-                date_format[h[1]] = f
+            if self.validate(h):
                 if str(h[2]).startswith("插播"):
                     cut_queue.append(h)
                 else:
                     normal_queue.append(h)
             else:
                 unformatted_queue.append(h)
-        cut_queue.sort(key=lambda h: datetime.strptime(h[1], date_format[h[1]]), reverse=True)
-        normal_queue.sort(key=lambda h: datetime.strptime(h[1], date_format[h[1]]))
+        cut_queue.sort(key=lambda h: datetime.strptime(h[1], self.date_format), reverse=True)
+        normal_queue.sort(key=lambda h: datetime.strptime(h[1], self.date_format))
         
         self.queue = deque(cut_queue + normal_queue + unformatted_queue)
         # print(self.queue)
@@ -388,7 +388,14 @@ class DemandQueue(QWidget):
         self.initHeaders(self.history_book)
         queue = self.history_book['待完成点播']
         for idx, row in enumerate(self.queue):
-            queue.append(row)
+            queue.cell(idx + 2, 1).value = row[0]
+            if self.validate(row):
+                date = datetime.strptime(row[1], self.date_format)
+                queue.cell(idx + 2, 2).value = date
+            else:
+                queue.cell(idx + 2, 2).value = row[1]
+            queue.cell(idx + 2, 3).value = row[2]
+            queue[idx + 2][1].style = 'custom_datetime'
             queue[idx + 2][2].alignment = Alignment(wrap_text=True)
         try:
             self.history_book.save('history.xlsx')
@@ -403,17 +410,19 @@ class DemandQueue(QWidget):
                 case '取消':
                     return False
     
-    def validate(self, date_str: str) -> str:
+    def validate(self, demand: list) -> bool:
         try:
-            datetime.strptime(date_str, self.date_format)
-            return self.date_format
+            time = datetime.strptime(demand[1], self.date_format)
+            demand[1] = time.strftime(self.date_format)
+            return True
         except ValueError:
             # print('En date match failed')
             pass
         
         try:
-            datetime.strptime(date_str, self.date_format_c)
-            return self.date_format_c
+            time = datetime.strptime(demand[1], self.date_format_c)
+            demand[1] = time.strftime(self.date_format)
+            return True
         except ValueError:
             # print('Cn date match failed')
             pass
