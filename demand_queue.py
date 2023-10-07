@@ -38,6 +38,8 @@ class DemandQueue(QWidget):
             if idx == 0:
                 continue
             demand = list(row)
+            if not demand[1]:
+                demand[1] = ''
             if isinstance(demand[1], datetime):
                 demand[1] = datetime.strftime(demand[1], self.date_format)
             self.queue.append(demand)
@@ -287,6 +289,10 @@ class DemandQueue(QWidget):
         name = self.name.toPlainText()
         date = self.date.toPlainText()
         desc = self.desc.toPlainText()
+        # Quick time addition
+        # Mainly for emergent cut queue
+        if not date:
+            date = datetime.now().strftime(self.date_format)
         new = [name, date, desc]
         if cut:
             # Pushing
